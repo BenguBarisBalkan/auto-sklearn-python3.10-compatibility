@@ -3,7 +3,8 @@ import warnings
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from sklearn.model_selection._split import _validate_shuffle_split
-from sklearn.utils import _approximate_mode, check_random_state, indexable
+from sklearn.utils import check_random_state, indexable
+from sklearn.utils.extmath import _approximate_mode
 from sklearn.utils.multiclass import type_of_target
 from sklearn.utils.validation import _num_samples, check_array, column_or_1d
 
