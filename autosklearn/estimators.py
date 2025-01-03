@@ -544,6 +544,8 @@ class AutoSklearnEstimator(BaseEstimator):
 
         if self.automl_ is None:
             self.automl_ = self.build_automl()
+
+        print('fit function is reached')
         self.automl_.fit(load_models=self.load_models, **kwargs)
 
         return self
