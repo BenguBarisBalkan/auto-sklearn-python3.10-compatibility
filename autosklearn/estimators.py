@@ -501,7 +501,7 @@ class AutoSklearnEstimator(BaseEstimator):
         return self.__dict__
 
     def build_automl(self):
-
+        print('build automl function is reached')
         initial_configs = self.initial_configurations_via_metalearning
         automl = self._get_automl_class()(
             temporary_directory=self.tmp_folder,
@@ -533,7 +533,7 @@ class AutoSklearnEstimator(BaseEstimator):
             allow_string_features=self.allow_string_features,
             disable_progress_bar=self.disable_progress_bar,
         )
-
+        print('automl builded')
         return automl
 
     def fit(self, **kwargs):
