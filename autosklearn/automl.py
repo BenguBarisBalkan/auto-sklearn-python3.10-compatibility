@@ -779,6 +779,7 @@ class AutoML(BaseEstimator):
             # Do this before calculating the meta-features to make sure that the
             # dummy predictions are actually included in the ensemble even if
             # calculating the meta-features takes very long
+            print('ENSEMBLE BUILDER IS REACHED')
             with self._stopwatch.time("Run Ensemble Builder"):
 
                 elapsed_time = self._stopwatch.time_since(self._dataset_name, "start")
