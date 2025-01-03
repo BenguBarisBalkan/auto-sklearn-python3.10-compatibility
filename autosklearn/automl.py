@@ -639,6 +639,7 @@ class AutoML(BaseEstimator):
         # If an error occurs then we want to make sure that we exit cleanly
         # and shut it down, else it might hang
         # https://github.com/automl/auto-sklearn/issues/1480
+        print('BASE AUTOML ESTIMATOR TRY STATEMENT REACHED')
         try:
             self._logger = self._get_logger(dataset_name)
 
@@ -829,7 +830,8 @@ class AutoML(BaseEstimator):
                 del self._datamanager
             except Exception:
                 pass
-
+            
+            print('SMAC REACHED IN TRY STATEMENT')
             # => RUN SMAC
             with self._stopwatch.time("Run SMAC"):
                 elapsed_time = self._stopwatch.time_since(self._dataset_name, "start")
@@ -957,6 +959,7 @@ class AutoML(BaseEstimator):
                         )
                     )
 
+            print('LOAD MODELS REACHED')
             if load_models:
                 self._logger.info("Loading models...")
                 self._load_models()
@@ -967,6 +970,7 @@ class AutoML(BaseEstimator):
         # down the logging server, preventing it from hanging and not closing
         # until ctrl+c is pressed
         except Exception as e:
+            print('EXCEPTION', e)
             # This will be called before the _fit_cleanup
             self._logger.exception(e)
             raise e

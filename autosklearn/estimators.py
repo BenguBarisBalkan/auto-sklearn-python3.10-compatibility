@@ -501,7 +501,6 @@ class AutoSklearnEstimator(BaseEstimator):
         return self.__dict__
 
     def build_automl(self):
-        print('build automl function is reached')
         initial_configs = self.initial_configurations_via_metalearning
         automl = self._get_automl_class()(
             temporary_directory=self.tmp_folder,
@@ -533,7 +532,6 @@ class AutoSklearnEstimator(BaseEstimator):
             allow_string_features=self.allow_string_features,
             disable_progress_bar=self.disable_progress_bar,
         )
-        print('automl builded')
         return automl
 
     def fit(self, **kwargs):
@@ -545,7 +543,7 @@ class AutoSklearnEstimator(BaseEstimator):
         if self.automl_ is None:
             self.automl_ = self.build_automl()
 
-        print('fit function is reached')
+        print(self.automl_)
         self.automl_.fit(load_models=self.load_models, **kwargs)
 
         return self
@@ -1394,7 +1392,6 @@ class AutoSklearnClassifier(AutoSklearnEstimator, ClassifierMixin):
     """This class implements the classification task."""
 
     def fit(self, X, y, X_test=None, y_test=None, feat_type=None, dataset_name=None):
-        print('classifier fit called')
         """Fit *auto-sklearn* to given training set (X, y).
 
         Fit both optimizes the machine learning models and builds an ensemble
