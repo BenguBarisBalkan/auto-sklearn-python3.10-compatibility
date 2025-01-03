@@ -1394,6 +1394,7 @@ class AutoSklearnClassifier(AutoSklearnEstimator, ClassifierMixin):
     """This class implements the classification task."""
 
     def fit(self, X, y, X_test=None, y_test=None, feat_type=None, dataset_name=None):
+        print('classifier fit called')
         """Fit *auto-sklearn* to given training set (X, y).
 
         Fit both optimizes the machine learning models and builds an ensemble
