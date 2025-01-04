@@ -1,4 +1,5 @@
 from abc import ABCMeta
+from contextlib import contextmanager
 from typing import Dict, Optional, Union
 
 import copy
@@ -684,6 +685,15 @@ class BasePipeline(Pipeline):
             self.steps[step_idx] = (name, fitted_transformer)
         return X
     
+    def _log_message(self, step_idx):
+        if not self.verbose:
+            return None
+        name, step = self.steps[step_idx]
+
+        return '(step %d of %d) Processing %s' % (step_idx + 1,
+                                                    len(self.steps),
+                                                    name)
+    
     def _fit_transform_one(self, transformer,
                         X,
                         y,
@@ -773,6 +783,7 @@ class BasePipeline(Pipeline):
         dots_len = 70 - len(start_message) - len(end_message)
         return "%s%s%s" % (start_message, dots_len * ".", end_message)  
 
+    @contextmanager
     def _print_elapsed_time(self, source, message=None):
         """Log elapsed time to stdout when the context is exited.
 
