@@ -1,6 +1,10 @@
 from abc import ABCMeta
 from typing import Dict, Optional, Union
 
+import copy
+import timeit
+import joblib
+import inspect
 import numpy as np
 import scipy.sparse
 from ConfigSpace import Configuration
@@ -613,3 +617,292 @@ class BasePipeline(Pipeline):
                                 component, key, arg, key, available_components
                             )
                         )
+    # BELOW FUNCTIONS ARE DIRECTLY COPIED FROM sklearn 0.24.X github repo
+    # https://github.com/scikit-learn/scikit-learn/blob/0.24.X/sklearn/pipeline.py
+    def _check_fit_params(self, **fit_params):
+        fit_params_steps = {name: {} for name, step in self.steps
+                            if step is not None}
+        for pname, pval in fit_params.items():
+            if '__' not in pname:
+                raise ValueError(
+                    "Pipeline.fit does not accept the {} parameter. "
+                    "You can pass parameters to specific steps of your "
+                    "pipeline using the stepname__parameter format, e.g. "
+                    "`Pipeline.fit(X, y, logisticregression__sample_weight"
+                    "=sample_weight)`.".format(pname))
+            step, param = pname.split('__', 1)
+            fit_params_steps[step][param] = pval
+        return fit_params_steps
+
+    # Estimator interface
+
+    def _fit(self, X, y=None, **fit_params_steps):
+        # shallow copy of steps - this should really be steps_
+        self.steps = list(self.steps)
+        self._validate_steps()
+        # Setup the memory
+        memory = check_memory(self.memory)
+
+        fit_transform_one_cached = memory.cache(_fit_transform_one)
+
+        for (step_idx,
+             name,
+             transformer) in self._iter(with_final=False,
+                                        filter_passthrough=False):
+            if (transformer is None or transformer == 'passthrough'):
+                with _print_elapsed_time('Pipeline',
+                                         self._log_message(step_idx)):
+                    continue
+
+            if hasattr(memory, 'location'):
+                # joblib >= 0.12
+                if memory.location is None:
+                    # we do not clone when caching is disabled to
+                    # preserve backward compatibility
+                    cloned_transformer = transformer
+                else:
+                    cloned_transformer = clone(transformer)
+            elif hasattr(memory, 'cachedir'):
+                # joblib < 0.11
+                if memory.cachedir is None:
+                    # we do not clone when caching is disabled to
+                    # preserve backward compatibility
+                    cloned_transformer = transformer
+                else:
+                    cloned_transformer = clone(transformer)
+            else:
+                cloned_transformer = clone(transformer)
+            # Fit or load from cache the current transformer
+            X, fitted_transformer = fit_transform_one_cached(
+                cloned_transformer, X, y, None,
+                message_clsname='Pipeline',
+                message=self._log_message(step_idx),
+                **fit_params_steps[name])
+            # Replace the transformer of the step with the fitted
+            # transformer. This is necessary when loading the transformer
+            # from the cache.
+            self.steps[step_idx] = (name, fitted_transformer)
+        return X
+    
+    def _fit_transform_one(transformer,
+                        X,
+                        y,
+                        weight,
+                        message_clsname='',
+                        message=None,
+                        **fit_params):
+        """
+        Fits ``transformer`` to ``X`` and ``y``. The transformed result is returned
+        with the fitted transformer. If ``weight`` is not ``None``, the result will
+        be multiplied by ``weight``.
+        """
+        with _print_elapsed_time(message_clsname, message):
+            if hasattr(transformer, 'fit_transform'):
+                res = transformer.fit_transform(X, y, **fit_params)
+            else:
+                res = transformer.fit(X, y, **fit_params).transform(X)
+
+        if weight is None:
+            return res, transformer
+        return res * weight, transformer
+
+    # from: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/utils/validation.py#L414
+    def check_memory(memory):
+        """Check that ``memory`` is joblib.Memory-like.
+
+        joblib.Memory-like means that ``memory`` can be converted into a
+        joblib.Memory instance (typically a str denoting the ``location``)
+        or has the same interface (has a ``cache`` method).
+
+        Parameters
+        ----------
+        memory : None, str or object with the joblib.Memory interface
+            - If string, the location where to create the `joblib.Memory` interface.
+            - If None, no caching is done and the Memory object is completely transparent.
+
+        Returns
+        -------
+        memory : object with the joblib.Memory interface
+            A correct joblib.Memory object.
+
+        Raises
+        ------
+        ValueError
+            If ``memory`` is not joblib.Memory-like.
+
+        Examples
+        --------
+        >>> from sklearn.utils.validation import check_memory
+        >>> check_memory("caching_dir")
+        Memory(location=caching_dir/joblib)
+        """
+        if memory is None or isinstance(memory, str):
+            memory = joblib.Memory(location=memory, verbose=0)
+        elif not hasattr(memory, "cache"):
+            raise ValueError(
+                "'memory' should be None, a string or have the same"
+                " interface as joblib.Memory."
+                " Got memory='{}' instead.".format(memory)
+            )
+        return memory
+
+    # from: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/utils/_user_interface.py#L36
+    def _message_with_time(source, message, time):
+        """Create one line message for logging purposes.
+
+        Parameters
+        ----------
+        source : str
+            String indicating the source or the reference of the message.
+
+        message : str
+            Short message.
+
+        time : int
+            Time in seconds.
+        """
+        start_message = "[%s] " % source
+
+        # adapted from joblib.logger.short_format_time without the Windows -.1s
+        # adjustment
+        if time > 60:
+            time_str = "%4.1fmin" % (time / 60)
+        else:
+            time_str = " %5.1fs" % time
+        end_message = " %s, total=%s" % (message, time_str)
+        dots_len = 70 - len(start_message) - len(end_message)
+        return "%s%s%s" % (start_message, dots_len * ".", end_message)  
+
+    def _print_elapsed_time(source, message=None):
+        """Log elapsed time to stdout when the context is exited.
+
+        Parameters
+        ----------
+        source : str
+            String indicating the source or the reference of the message.
+
+        message : str, default=None
+            Short message. If None, nothing will be printed.
+
+        Returns
+        -------
+        context_manager
+            Prints elapsed time upon exit if verbose.
+        """
+        if message is None:
+            yield
+        else:
+            start = timeit.default_timer()
+            yield
+            print(_message_with_time(source, message, timeit.default_timer() - start))
+
+    def clone(estimator, *, safe=True):
+        """Construct a new unfitted estimator with the same parameters.
+
+        Clone does a deep copy of the model in an estimator
+        without actually copying attached data. It returns a new estimator
+        with the same parameters that has not been fitted on any data.
+
+        .. versionchanged:: 1.3
+            Delegates to `estimator.__sklearn_clone__` if the method exists.
+
+        Parameters
+        ----------
+        estimator : {list, tuple, set} of estimator instance or a single \
+                estimator instance
+            The estimator or group of estimators to be cloned.
+        safe : bool, default=True
+            If safe is False, clone will fall back to a deep copy on objects
+            that are not estimators. Ignored if `estimator.__sklearn_clone__`
+            exists.
+
+        Returns
+        -------
+        estimator : object
+            The deep copy of the input, an estimator if input is an estimator.
+
+        Notes
+        -----
+        If the estimator's `random_state` parameter is an integer (or if the
+        estimator doesn't have a `random_state` parameter), an *exact clone* is
+        returned: the clone and the original estimator will give the exact same
+        results. Otherwise, *statistical clone* is returned: the clone might
+        return different results from the original estimator. More details can be
+        found in :ref:`randomness`.
+
+        Examples
+        --------
+        >>> from sklearn.base import clone
+        >>> from sklearn.linear_model import LogisticRegression
+        >>> X = [[-1, 0], [0, 1], [0, -1], [1, 0]]
+        >>> y = [0, 0, 1, 1]
+        >>> classifier = LogisticRegression().fit(X, y)
+        >>> cloned_classifier = clone(classifier)
+        >>> hasattr(classifier, "classes_")
+        True
+        >>> hasattr(cloned_classifier, "classes_")
+        False
+        >>> classifier is cloned_classifier
+        False
+        """
+        if hasattr(estimator, "__sklearn_clone__") and not inspect.isclass(estimator):
+            return estimator.__sklearn_clone__()
+        return _clone_parametrized(estimator, safe=safe)
+
+    def _clone_parametrized(estimator, *, safe=True):
+        """Default implementation of clone. See :func:`sklearn.base.clone` for details."""
+
+        estimator_type = type(estimator)
+        if estimator_type is dict:
+            return {k: clone(v, safe=safe) for k, v in estimator.items()}
+        elif estimator_type in (list, tuple, set, frozenset):
+            return estimator_type([clone(e, safe=safe) for e in estimator])
+        elif not hasattr(estimator, "get_params") or isinstance(estimator, type):
+            if not safe:
+                return copy.deepcopy(estimator)
+            else:
+                if isinstance(estimator, type):
+                    raise TypeError(
+                        "Cannot clone object. "
+                        + "You should provide an instance of "
+                        + "scikit-learn estimator instead of a class."
+                    )
+                else:
+                    raise TypeError(
+                        "Cannot clone object '%s' (type %s): "
+                        "it does not seem to be a scikit-learn "
+                        "estimator as it does not implement a "
+                        "'get_params' method." % (repr(estimator), type(estimator))
+                    )
+
+        klass = estimator.__class__
+        new_object_params = estimator.get_params(deep=False)
+        for name, param in new_object_params.items():
+            new_object_params[name] = clone(param, safe=False)
+
+        new_object = klass(**new_object_params)
+        try:
+            new_object._metadata_request = copy.deepcopy(estimator._metadata_request)
+        except AttributeError:
+            pass
+
+        params_set = new_object.get_params(deep=False)
+
+        # quick sanity check of the parameters of the clone
+        for name in new_object_params:
+            param1 = new_object_params[name]
+            param2 = params_set[name]
+            if param1 is not param2:
+                raise RuntimeError(
+                    "Cannot clone object %s, as the constructor "
+                    "either does not set or modifies parameter %s" % (estimator, name)
+                )
+
+        # _sklearn_output_config is used by `set_output` to configure the output
+        # container of an estimator.
+        if hasattr(estimator, "_sklearn_output_config"):
+            new_object._sklearn_output_config = copy.deepcopy(
+                estimator._sklearn_output_config
+            )
+        return new_object
+
