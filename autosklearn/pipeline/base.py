@@ -641,16 +641,16 @@ class BasePipeline(Pipeline):
         self.steps = list(self.steps)
         self._validate_steps()
         # Setup the memory
-        memory = check_memory(self.memory)
+        memory = self.check_memory(self.memory)
 
-        fit_transform_one_cached = memory.cache(_fit_transform_one)
+        fit_transform_one_cached = memory.cache(self._fit_transform_one)
 
         for (step_idx,
              name,
              transformer) in self._iter(with_final=False,
                                         filter_passthrough=False):
             if (transformer is None or transformer == 'passthrough'):
-                with _print_elapsed_time('Pipeline',
+                with self._print_elapsed_time('Pipeline',
                                          self._log_message(step_idx)):
                     continue
 
@@ -661,7 +661,7 @@ class BasePipeline(Pipeline):
                     # preserve backward compatibility
                     cloned_transformer = transformer
                 else:
-                    cloned_transformer = clone(transformer)
+                    cloned_transformer = self.clone(transformer)
             elif hasattr(memory, 'cachedir'):
                 # joblib < 0.11
                 if memory.cachedir is None:
@@ -669,9 +669,9 @@ class BasePipeline(Pipeline):
                     # preserve backward compatibility
                     cloned_transformer = transformer
                 else:
-                    cloned_transformer = clone(transformer)
+                    cloned_transformer = self.clone(transformer)
             else:
-                cloned_transformer = clone(transformer)
+                cloned_transformer = self.clone(transformer)
             # Fit or load from cache the current transformer
             X, fitted_transformer = fit_transform_one_cached(
                 cloned_transformer, X, y, None,
@@ -696,7 +696,7 @@ class BasePipeline(Pipeline):
         with the fitted transformer. If ``weight`` is not ``None``, the result will
         be multiplied by ``weight``.
         """
-        with _print_elapsed_time(message_clsname, message):
+        with self._print_elapsed_time(message_clsname, message):
             if hasattr(transformer, 'fit_transform'):
                 res = transformer.fit_transform(X, y, **fit_params)
             else:
@@ -794,7 +794,7 @@ class BasePipeline(Pipeline):
         else:
             start = timeit.default_timer()
             yield
-            print(_message_with_time(source, message, timeit.default_timer() - start))
+            print(self._message_with_time(source, message, timeit.default_timer() - start))
 
     def clone(estimator, *, safe=True):
         """Construct a new unfitted estimator with the same parameters.
@@ -847,16 +847,16 @@ class BasePipeline(Pipeline):
         """
         if hasattr(estimator, "__sklearn_clone__") and not inspect.isclass(estimator):
             return estimator.__sklearn_clone__()
-        return _clone_parametrized(estimator, safe=safe)
+        return self._clone_parametrized(estimator, safe=safe)
 
     def _clone_parametrized(estimator, *, safe=True):
         """Default implementation of clone. See :func:`sklearn.base.clone` for details."""
 
         estimator_type = type(estimator)
         if estimator_type is dict:
-            return {k: clone(v, safe=safe) for k, v in estimator.items()}
+            return {k: self.clone(v, safe=safe) for k, v in estimator.items()}
         elif estimator_type in (list, tuple, set, frozenset):
-            return estimator_type([clone(e, safe=safe) for e in estimator])
+            return estimator_type([self.clone(e, safe=safe) for e in estimator])
         elif not hasattr(estimator, "get_params") or isinstance(estimator, type):
             if not safe:
                 return copy.deepcopy(estimator)
@@ -878,7 +878,7 @@ class BasePipeline(Pipeline):
         klass = estimator.__class__
         new_object_params = estimator.get_params(deep=False)
         for name, param in new_object_params.items():
-            new_object_params[name] = clone(param, safe=False)
+            new_object_params[name] = self.clone(param, safe=False)
 
         new_object = klass(**new_object_params)
         try:
