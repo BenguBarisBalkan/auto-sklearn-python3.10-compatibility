@@ -684,7 +684,7 @@ class BasePipeline(Pipeline):
             self.steps[step_idx] = (name, fitted_transformer)
         return X
     
-    def _fit_transform_one(transformer,
+    def _fit_transform_one(self, transformer,
                         X,
                         y,
                         weight,
@@ -707,7 +707,7 @@ class BasePipeline(Pipeline):
         return res * weight, transformer
 
     # from: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/utils/validation.py#L414
-    def check_memory(memory):
+    def check_memory(self, memory):
         """Check that ``memory`` is joblib.Memory-like.
 
         joblib.Memory-like means that ``memory`` can be converted into a
@@ -747,7 +747,7 @@ class BasePipeline(Pipeline):
         return memory
 
     # from: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/utils/_user_interface.py#L36
-    def _message_with_time(source, message, time):
+    def _message_with_time(self, source, message, time):
         """Create one line message for logging purposes.
 
         Parameters
@@ -773,7 +773,7 @@ class BasePipeline(Pipeline):
         dots_len = 70 - len(start_message) - len(end_message)
         return "%s%s%s" % (start_message, dots_len * ".", end_message)  
 
-    def _print_elapsed_time(source, message=None):
+    def _print_elapsed_time(self, source, message=None):
         """Log elapsed time to stdout when the context is exited.
 
         Parameters
@@ -796,7 +796,7 @@ class BasePipeline(Pipeline):
             yield
             print(self._message_with_time(source, message, timeit.default_timer() - start))
 
-    def clone(estimator, *, safe=True):
+    def clone(self, estimator, *, safe=True):
         """Construct a new unfitted estimator with the same parameters.
 
         Clone does a deep copy of the model in an estimator
@@ -849,7 +849,7 @@ class BasePipeline(Pipeline):
             return estimator.__sklearn_clone__()
         return self._clone_parametrized(estimator, safe=safe)
 
-    def _clone_parametrized(estimator, *, safe=True):
+    def _clone_parametrized(self, estimator, *, safe=True):
         """Default implementation of clone. See :func:`sklearn.base.clone` for details."""
 
         estimator_type = type(estimator)
